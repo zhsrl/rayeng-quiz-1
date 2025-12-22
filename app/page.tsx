@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { ChevronRight, CheckCircle, User, Phone, Award, ArrowRight } from 'lucide-react';
 
 // === НАСТРОЙКИ ===
-// Сюда нужно вставить ссылку Web App из Google Apps Script
 const GOOGLE_SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwAyLpGPHDjUrBbzG9TG0RGw35d_WNLbkw0Y9Qu5n9QVScp4CfNt5JHoVDZIx9aD8Nq/exec"; 
 const WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029Vb6cRM84yltYGCtATc2n";
 const REDIRECT_DELAY_SECONDS = 10;
+
+// Номер счетчика Яндекс.Метрики
+const YANDEX_METRIKA_ID = 105964351; 
 
 const questions = [
   {
@@ -82,7 +84,6 @@ const questions = [
     ],
     correct: 'C'
   },
-  // Новые вопросы 7-10
   {
     id: 7,
     title: "Өткен шақ формасын таңдаңыз:",
@@ -134,7 +135,7 @@ const questions = [
 ];
 
 export default function App() {
-  const [step, setStep] = useState('welcome'); // welcome, quiz, lead, result
+  const [step, setStep] = useState('welcome'); 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [score, setScore] = useState(0);
@@ -142,9 +143,30 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [countdown, setCountdown] = useState(REDIRECT_DELAY_SECONDS);
 
+  // Инициализация Яндекс Метрики
+  useEffect(() => {
+    if (YANDEX_METRIKA_ID !== 0) {
+        (function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+        (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+        window.ym(YANDEX_METRIKA_ID, "init", {
+             ssr: true,
+             webvisor: true,
+             clickmap: true,
+             ecommerce: "dataLayer",
+             accurateTrackBounce: true,
+             trackLinks: true
+        });
+    }
+  }, []);
+
   // Логика начала квиза
   const startQuiz = () => {
     setStep('quiz');
+    if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'quiz_start');
   };
 
   // Обработка ответа
@@ -157,18 +179,22 @@ export default function App() {
       setScore(s => s + 1);
     }
 
+    // Отслеживаем ответ на вопрос (для воронки)
+    if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', `answer_q${currentQuestionIndex + 1}`);
+
     setTimeout(() => {
       if (currentQuestionIndex < questions.length - 1) {
         setCurrentQuestionIndex(prev => prev + 1);
       } else {
+        // Переход к форме
         setStep('lead');
+        if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'view_form');
       }
     }, 250);
   };
 
-  // === ФОРМАТТЕР ТЕЛЕФОНА (KZ) ===
   const handlePhoneChange = (e) => {
-    let input = e.target.value.replace(/\D/g, ''); // Удаляем все нецифровые символы
+    let input = e.target.value.replace(/\D/g, '');
     let formatted = '';
 
     if (!input) {
@@ -176,7 +202,6 @@ export default function App() {
       return;
     }
 
-    // Логика для Казахстана: если вводят 8..., 7... или сразу 701...
     if (['7', '8', '9'].includes(input[0])) {
       if (input[0] === '9') input = '7' + input;
       if (input[0] === '8') input = '7' + input.substring(1);
@@ -202,7 +227,6 @@ export default function App() {
     
     const finalData = {
       ...leadData,
-      // Добавляем апостроф, чтобы Sheets считал это текстом, а не формулой
       phone: `'${leadData.phone}`, 
       score: score,
       total: questions.length,
@@ -214,7 +238,6 @@ export default function App() {
     // === ОТПРАВКА В GOOGLE SHEETS ===
     if (GOOGLE_SHEETS_WEBHOOK_URL) {
       try {
-        // ИСПОЛЬЗУЕМ URLSearchParams (Работает стабильнее с GAS e.parameter)
         const params = new URLSearchParams();
         for (const key in finalData) {
             params.append(key, finalData[key]);
@@ -234,6 +257,9 @@ export default function App() {
         console.error("Error sending to Google Sheets", error);
       }
     }
+    
+    // Событие успешной заявки в Метрику
+    if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'lead_submit');
 
     setTimeout(() => {
       setIsSubmitting(false);
@@ -241,7 +267,6 @@ export default function App() {
     }, 1500);
   };
 
-  // Таймер перенаправления
   useEffect(() => {
     if (step === 'result') {
       const timer = setInterval(() => {
@@ -263,7 +288,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans text-slate-800">
-      {/* Скрываем бейджик v0 с указанным классом */}
       <style>{`
         .v0-built-with-button-303d5a56-3155-49b3-8ef4-74d4ffcfdf7c {
           display: none !important;
@@ -273,6 +297,11 @@ export default function App() {
         }
       `}</style>
       
+      {/* Скрытый блок Яндекс Метрики (noscript) */}
+      {YANDEX_METRIKA_ID !== 0 && (
+          <noscript><div><img src={`https://mc.yandex.ru/watch/${YANDEX_METRIKA_ID}`} style={{position:'absolute', left:'-9999px'}} alt="" /></div></noscript>
+      )}
+
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
         
         {/* === STEP 1: WELCOME SCREEN === */}
@@ -298,7 +327,6 @@ export default function App() {
         {/* === STEP 2: QUIZ SCREEN === */}
         {step === 'quiz' && (
           <div className="flex flex-col h-full">
-            {/* Progress Bar */}
             <div className="w-full bg-slate-100 h-2">
               <div 
                 className="bg-blue-600 h-2 transition-all duration-500 ease-out" 
@@ -380,7 +408,7 @@ export default function App() {
 
               <button 
                 type="submit"
-                disabled={isSubmitting || leadData.phone.length < 18} // Блокировка если номер не полный
+                disabled={isSubmitting || leadData.phone.length < 18} 
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-xl mt-4 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
               >
                 {isSubmitting ? 'Өңделуде...' : 'Нәтижені алу'} 
@@ -442,7 +470,6 @@ export default function App() {
               <p className="text-sm text-blue-600">Сізге деңгейіңізді толықтай анықтайтын пробный сабаққа 90% жеңілдік беріледі.</p>
             </div>
 
-            {/* Автоматический переход в WhatsApp с таймером */}
             <div className="mt-8 pt-4 border-t border-slate-100">
               <p className="text-sm text-slate-500 mb-3 font-medium">
                 WhatsApp арнасына автоматты түрде өту:
