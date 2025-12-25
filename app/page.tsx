@@ -10,6 +10,8 @@ const REDIRECT_DELAY_SECONDS = 10;
 
 // Номер счетчика Яндекс.Метрики
 const YANDEX_METRIKA_ID = 105964351; 
+// ID пикселя Facebook
+const FACEBOOK_PIXEL_ID = '718818164250110';
 
 const questions = [
   {
@@ -143,10 +145,10 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [countdown, setCountdown] = useState(REDIRECT_DELAY_SECONDS);
 
-  // Инициализация Яндекс Метрики
+  // Инициализация аналитики (Яндекс.Метрика + Facebook Pixel)
   useEffect(() => {
+    // === YANDEX METRIKA ===
     if (YANDEX_METRIKA_ID !== 0) {
-        // Код инициализации (function(m,e,t,r,i,k,a)...)
         (function(m,e,t,r,i,k,a){
             m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
             m[i].l=1*new Date();
@@ -155,7 +157,6 @@ export default function App() {
         })
         (window, document, "script", `https://mc.yandex.ru/metrika/tag.js?id=${YANDEX_METRIKA_ID}`, "ym");
 
-        // Вызов init с параметрами из вашего кода
         window.ym(YANDEX_METRIKA_ID, "init", {
              ssr: true,
              webvisor: true,
@@ -165,12 +166,40 @@ export default function App() {
              trackLinks: true
         });
     }
+
+    // === FACEBOOK PIXEL (Исправленная версия) ===
+    if (FACEBOOK_PIXEL_ID && typeof window !== 'undefined') {
+        // Проверяем, не был ли пиксель уже инициализирован
+        if (!window.fbq) {
+            window.fbq = function() {
+                window.fbq.callMethod ? 
+                window.fbq.callMethod.apply(window.fbq, arguments) : 
+                window.fbq.queue.push(arguments);
+            };
+            if (!window._fbq) window._fbq = window.fbq;
+            window.fbq.push = window.fbq;
+            window.fbq.loaded = true;
+            window.fbq.version = '2.0';
+            window.fbq.queue = [];
+            
+            // Создаем скрипт вручную и добавляем в HEAD для надежности
+            const script = document.createElement('script');
+            script.async = true;
+            script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+            document.head.appendChild(script);
+        }
+        
+        window.fbq('init', FACEBOOK_PIXEL_ID);
+        window.fbq('track', 'PageView');
+    }
   }, []);
 
   // Логика начала квиза
   const startQuiz = () => {
     setStep('quiz');
     if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'quiz_start');
+    // Отправка события начала в Facebook
+    if (window.fbq) window.fbq('trackCustom', 'StartQuiz');
   };
 
   // Обработка ответа
@@ -183,14 +212,12 @@ export default function App() {
       setScore(s => s + 1);
     }
 
-    // Отслеживаем ответ на вопрос (для воронки)
     if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', `answer_q${currentQuestionIndex + 1}`);
 
     setTimeout(() => {
       if (currentQuestionIndex < questions.length - 1) {
         setCurrentQuestionIndex(prev => prev + 1);
       } else {
-        // Переход к форме
         setStep('lead');
         if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'view_form');
       }
@@ -264,6 +291,9 @@ export default function App() {
     
     // Событие успешной заявки в Метрику
     if (window.ym) window.ym(YANDEX_METRIKA_ID, 'reachGoal', 'lead_submit');
+    
+    // Событие успешной заявки в Facebook Pixel
+    if (window.fbq) window.fbq('track', 'Lead');
 
     setTimeout(() => {
       setIsSubmitting(false);
@@ -304,6 +334,13 @@ export default function App() {
       {/* Скрытый блок Яндекс Метрики (noscript) */}
       {YANDEX_METRIKA_ID !== 0 && (
           <noscript><div><img src={`https://mc.yandex.ru/watch/${YANDEX_METRIKA_ID}`} style={{position:'absolute', left:'-9999px'}} alt="" /></div></noscript>
+      )}
+
+      {/* Скрытый блок Facebook Pixel (noscript) */}
+      {FACEBOOK_PIXEL_ID && (
+          <noscript><img height="1" width="1" style={{display:'none'}}
+          src={`https://www.facebook.com/tr?id=${FACEBOOK_PIXEL_ID}&ev=PageView&noscript=1`}
+          /></noscript>
       )}
 
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
